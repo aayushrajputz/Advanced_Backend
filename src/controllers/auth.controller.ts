@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as authService from '../services/auth.service.js';
 import { env } from '../config/env.config.js';
-import { success } from 'zod';
+import { UnauthorizedError } from '../errors/app-errors.js';
 
 
 export const signUp = async (req: Request, res: Response, next: NextFunction) => {
@@ -47,3 +47,18 @@ export const logout = async (req: Request, res: Response, next: NextFunction) =>
         next(err);
     }
 }
+
+export const refresh = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const refreshToken = req.cookies.refreshToken;
+        if (!refreshToken) {
+            throw new UnauthorizedError("Refresh token missing")
+
+        }
+        const { user, accessToken } = await authService.refresh(refreshToken);
+        return res.status(200).json({ success: true, data: { user, accessToken } })
+    }
+    catch (err) {
+        next(err)
+    }
+} 

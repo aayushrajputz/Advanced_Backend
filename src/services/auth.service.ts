@@ -69,13 +69,17 @@ export const login = async (email: string, password: string) => {
 }
 
 export const refresh = async (refreshToken: string) => {
-    const userVerify = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { userId: string };
-    if (!userVerify) {
-        throw new UnauthorizedError("Invalid or expired refresh token")
+    let payload: { userId: string };
+
+    try {
+        payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { userId: string };
+    } catch (err) {
+        throw new UnauthorizedError("Invalid or expired refresh token");
     }
-    const user = userRepo.findById(userVerify.userId);
+
+    const user = userRepo.findById(payload.userId);
     if (!user) {
-        throw new UnauthorizedError("User not found")
+        throw new UnauthorizedError("User not found");
     }
 
     const accessToken = jwt.sign({
@@ -83,14 +87,10 @@ export const refresh = async (refreshToken: string) => {
         userEmail: user.email
     }, env.JWT_SECRET, {
         expiresIn: "15m"
-    })
+    });
+
     return {
-        user: {
-            id: user.id,
-            email: user.email
-        },
+        user: { id: user.id, email: user.email },
         accessToken,
-
-    }
-
-}
+    };
+};
