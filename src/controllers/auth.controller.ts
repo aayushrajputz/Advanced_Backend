@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as authService from '../services/auth.service.js';
 import { env } from '../config/env.config.js';
+import { success } from 'zod';
 
 
 export const signUp = async (req: Request, res: Response, next: NextFunction) => {
@@ -35,5 +36,14 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     } catch (error) {
         next(error);
+    }
+}
+
+export const logout = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        res.clearCookie("refreshToken");
+        return res.status(200).json({ success: true, message: "Logout successful" });
+    } catch (err) {
+        next(err);
     }
 }

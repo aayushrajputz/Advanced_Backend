@@ -5,6 +5,7 @@ import { env } from "../config/env.config.js";
 import * as userRepo from "../repositories/user.repository.js";
 import { BadRequestError, UnauthorizedError } from "../errors/app-errors.js";
 
+
 export const signUp = async (name: string, email: string, password: string) => {
     const existingUser = userRepo.findByEmail(email);
     if (existingUser) {
@@ -63,6 +64,33 @@ export const login = async (email: string, password: string) => {
         },
         accessToken,
         refreshToken
+    }
+
+}
+
+export const refresh = async (refreshToken: string) => {
+    const userVerify = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { userId: string };
+    if (!userVerify) {
+        throw new UnauthorizedError("Invalid or expired refresh token")
+    }
+    const user = userRepo.findById(userVerify.userId);
+    if (!user) {
+        throw new UnauthorizedError("User not found")
+    }
+
+    const accessToken = jwt.sign({
+        userId: user.id,
+        userEmail: user.email
+    }, env.JWT_SECRET, {
+        expiresIn: "15m"
+    })
+    return {
+        user: {
+            id: user.id,
+            email: user.email
+        },
+        accessToken,
+
     }
 
 }
