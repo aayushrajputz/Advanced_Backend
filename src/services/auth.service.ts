@@ -43,7 +43,7 @@ export const login = async (email: string, password: string) => {
     }
     const userVerify = await argon2.verify(user.password, password);
     if (!userVerify) {
-        throw new UnauthorizedError(" Invalid credentials")
+        throw new UnauthorizedError("Invalid credentials")
     }
 
     const accessToken = jwt.sign({
