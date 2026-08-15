@@ -81,6 +81,446 @@ graph TD
 
 ---
 
+## 🏦 Fintech & Advanced System Design Patterns
+
+Beyond the 11 Core Pillars, building a **production-grade financial system** requires mastery of these specialized patterns:
+
+### 🏛️ 1. Double-Entry Bookkeeping & Financial Ledgers
+**The Fintech Foundation:** Every financial transaction must maintain **zero-variance auditability**.
+
+*   **The Problem:** A user transfers $100 but only the withdrawal is recorded (not the deposit), creating a $100 discrepancy.
+*   **The Solution:** Implement **Double-Entry Bookkeeping**:
+    - Every debit on one account = a credit on another
+    - Create an immutable `LedgerEntry` table recording every transaction
+    - Implement a `runningBalance` field to detect tampering
+    
+**Implementation Example:**
+```typescript
+// 1. Transaction initiated
+await prisma.$transaction(async (tx) => {
+  // 2. DEBIT: Decrement source wallet
+  await tx.wallet.update({
+    where: { id: fromWalletId },
+    data: { balance: { decrement: amount } },
+  });
+
+  // 3. CREDIT: Increment destination wallet
+  await tx.wallet.update({
+    where: { id: toWalletId },
+    data: { balance: { increment: amount } },
+  });
+
+  // 4. AUDIT: Log both sides to immutable ledger
+  await tx.ledgerEntry.create({
+    data: {
+      walletId: fromWalletId,
+      type: 'DEBIT',
+      amount,
+      description: `Transfer to ${toWalletId}`,
+      runningBalance: updatedFromBalance,
+      transactionId: txnId,
+    },
+  });
+
+  await tx.ledgerEntry.create({
+    data: {
+      walletId: toWalletId,
+      type: 'CREDIT',
+      amount,
+      description: `Transfer from ${fromWalletId}`,
+      runningBalance: updatedToBalance,
+      transactionId: txnId,
+    },
+  });
+});
+```
+
+### 🔒 2. Concurrency Control & Race Condition Prevention
+**The Problem:** Two simultaneous withdrawal requests both pass balance checks, causing overdraft.
+
+**User A (Thread 1):** Check balance = $100 ✓ → Deduct $80 ✓
+**User B (Thread 2):** Check balance = $100 ✓ → Deduct $50 ✗ (should fail, would go -$30)
+
+**Solutions:**
+
+#### A) Optimistic Locking (Version Fields)
+Best for **low-contention** scenarios (most finance systems):
+```typescript
+await prisma.$transaction(async (tx) => {
+  const wallet = await tx.wallet.findUnique({
+    where: { id: walletId },
+  });
+
+  if (wallet.balance < amount) {
+    throw new AppError('Insufficient funds', 400);
+  }
+
+  // Attempt update only if version hasn't changed
+  const updated = await tx.wallet.updateMany({
+    where: { 
+      id: walletId,
+      version: wallet.version,  // ← Optimistic check
+    },
+    data: {
+      balance: { decrement: amount },
+      version: { increment: 1 },  // ← Increment for next attempt
+    },
+  });
+
+  if (updated.count === 0) {
+    throw new AppError('Version conflict - wallet was modified', 409);
+  }
+});
+```
+
+#### B) Pessimistic Locking (SELECT FOR UPDATE)
+Best for **high-contention** scenarios (trading floors):
+```typescript
+await prisma.$transaction(async (tx) => {
+  // Lock the row until transaction ends
+  const [wallet] = await tx.$queryRaw<any[]>`
+    SELECT * FROM "Wallet" WHERE id = ${walletId} FOR UPDATE
+  `;
+
+  if (wallet.balance < amount) {
+    throw new AppError('Insufficient funds', 400);
+  }
+
+  await tx.wallet.update({
+    where: { id: walletId },
+    data: { balance: { decrement: amount } },
+  });
+});
+```
+
+### 📊 3. Order Matching Engine & Real-Time Trading
+**The Challenge:** Match thousands of buy/sell orders atomically without race conditions.
+
+**Architecture:**
+```
+Client Buy Order (1 BTC @ $50K)
+        ↓
+    Kafka Queue (Partition: BTC-INR)
+        ↓
+Order Matching Engine (Single Consumer)
+        ↓
+    Redis Sorted Set (OrderBook)
+    ├─ Buy Orders: ZADD orders:buy:btc-inr 50000 order_123
+    └─ Sell Orders: ZADD orders:sell:btc-inr 50100 order_456
+        ↓
+    Match Found? → Execute Trade Atomically
+        ├─ Debit Buyer's Wallet
+        ├─ Credit Seller's Wallet
+        ├─ Log Double-Entry Ledger
+        ├─ Remove Matched Orders from OrderBook
+        └─ Publish trade.executed Event
+```
+
+**Implementation:**
+```typescript
+// Check for matching orders
+const buyOrders = await redis.zrevrange(`orders:buy:${symbol}`, 0, -1, 'WITHSCORES');
+const sellOrders = await redis.zrange(`orders:sell:${symbol}`, 0, -1, 'WITHSCORES');
+
+// Find matches (buy price >= sell price)
+const matches = matchOrders(buyOrders, sellOrders);
+
+for (const match of matches) {
+  // Execute trade in atomic transaction
+  await prisma.$transaction(async (tx) => {
+    // 1. Update wallets
+    await tx.wallet.update({
+      where: { id: match.buyerId },
+      data: { balance: { decrement: match.price * match.quantity } },
+    });
+
+    await tx.wallet.update({
+      where: { id: match.sellerId },
+      data: { balance: { increment: match.price * match.quantity } },
+    });
+
+    // 2. Create trade record
+    const trade = await tx.trade.create({
+      data: {
+        buyOrderId: match.buyOrderId,
+        sellOrderId: match.sellOrderId,
+        price: match.price,
+        quantity: match.quantity,
+        executedAt: new Date(),
+      },
+    });
+
+    // 3. Log ledger entries
+    await tx.ledgerEntry.createMany({
+      data: [
+        {
+          walletId: match.buyerId,
+          type: 'DEBIT',
+          amount: match.price * match.quantity,
+          tradeId: trade.id,
+        },
+        {
+          walletId: match.sellerId,
+          type: 'CREDIT',
+          amount: match.price * match.quantity,
+          tradeId: trade.id,
+        },
+      ],
+    });
+
+    // 4. Remove from OrderBook
+    await redis.zrem(`orders:buy:${symbol}`, match.buyOrderId);
+    await redis.zrem(`orders:sell:${symbol}`, match.sellOrderId);
+  });
+
+  // Publish event for subscribers
+  await kafka.producer.send({
+    topic: 'trade.executed',
+    messages: [{ value: JSON.stringify(trade) }],
+  });
+}
+```
+
+### 🔐 4. Data Transfer Object (DTO) Security Pattern
+**The Problem:** Returning raw database models exposes sensitive fields like `password`, `apiKey`, `internalBalance`.
+
+**The Solution:** Explicitly map database entities to safe DTOs:
+
+```typescript
+// Domain/Database Entity
+interface User {
+  id: string;
+  email: string;
+  password: string;          // ← NEVER in response
+  apiKey: string;            // ← NEVER in response
+  walletBalance: number;     // Might be sensitive
+  createdAt: Date;
+}
+
+// DTO sent to client
+interface UserResponseDTO {
+  id: string;
+  email: string;
+  createdAt: Date;
+  // password and apiKey are completely excluded
+}
+
+// Service layer ensures transformation
+export class UserService {
+  async getUserProfile(userId: string): Promise<UserResponseDTO> {
+    const user = await userRepo.findById(userId);
+    
+    // Explicit mapping (not just spreading)
+    return {
+      id: user.id,
+      email: user.email,
+      createdAt: user.createdAt,
+      // password, apiKey intentionally omitted
+    };
+  }
+}
+```
+
+### 📌 5. HTTP Status Codes for Financial Operations
+**Why It Matters:** Clients need to distinguish between retryable errors and permanent failures.
+
+```typescript
+// Create transaction (may be processed asynchronously)
+201 Created        → Order created, validation passed, awaiting settlement
+202 Accepted       → Order received, queued for matching engine
+400 Bad Request    → Invalid schema (amount negative, malformed email)
+409 Conflict       → Duplicate transaction (idempotency key seen before)
+422 Unprocessable  → Business logic failure (insufficient balance, closed market)
+429 Too Many       → Rate limit exceeded
+500 Internal Error → Database/system error, do NOT retry
+503 Unavailable    → Maintenance/degraded mode, safe to retry
+
+// Handling retries
+try {
+  const response = await fetch('/api/withdraw', {
+    method: 'POST',
+    headers: { 'X-Idempotency-Key': uuidv4() },
+    body: JSON.stringify({ amount: 100 }),
+  });
+  
+  if (response.status === 202) {
+    // Polling mechanism or WebSocket for async updates
+    pollForResult(transactionId);
+  }
+} catch (error) {
+  if ([408, 429, 500, 503].includes(error.status)) {
+    // Retry with exponential backoff
+    await exponentialBackoffRetry();
+  }
+}
+```
+
+### 🔄 6. Asynchronous Processing & DLQ Strategy
+**The Challenge:** Settling a trade takes time (risk calculation, AML checks, bank transfers). Don't block the user.
+
+**Pattern:**
+```
+Order Placement (Fast)
+   ↓
+Kafka Topic: "orders.submitted"
+   ↓
+Settlement Workers (Async)
+   ├─ Validate
+   ├─ Calculate Risk
+   ├─ AML Screening
+   └─ Update Ledger
+   ↓
+   If any step fails → RabbitMQ DLQ
+   ↓
+Dead Letter Queue (for offline inspection)
+   ├─ Alert Operations Team
+   ├─ Retry after manual review
+   └─ Log for audits
+```
+
+**Implementation:**
+```typescript
+// Producer: Immediate response to client
+export const submitOrder = async (req: Request, res: Response) => {
+  const order = await orderRepo.create(req.body);
+  
+  // Don't wait for settlement
+  await kafka.producer.send({
+    topic: 'orders.submitted',
+    messages: [{ value: JSON.stringify(order), key: order.symbol }],
+  });
+
+  res.status(202).json({ success: true, orderId: order.id });
+};
+
+// Consumer: Async settlement
+export const settlementWorker = async (message: any) => {
+  const order = JSON.parse(message.value);
+  
+  try {
+    // Risk validation
+    const riskCheck = await riskService.validate(order);
+    if (!riskCheck.pass) {
+      throw new Error(`Risk check failed: ${riskCheck.reason}`);
+    }
+
+    // AML screening
+    const amlCheck = await amlService.screen(order.userId);
+    if (!amlCheck.pass) {
+      throw new Error(`AML screening failed`);
+    }
+
+    // Atomic ledger update
+    await prisma.$transaction(async (tx) => {
+      // Execute trade
+    });
+
+    // Publish success event
+    await kafka.producer.send({
+      topic: 'orders.settled',
+      messages: [{ value: JSON.stringify({ orderId: order.id, status: 'FILLED' }) }],
+    });
+
+  } catch (error) {
+    // Route to DLQ
+    await dlq.publish({
+      originalMessage: message,
+      error: error.message,
+      retryCount: message.retryCount || 0,
+      timestamp: new Date(),
+    });
+
+    // Alert operations
+    await alertService.sendToOpsTeam(
+      `Order settlement failed: ${order.id}`,
+      error.message
+    );
+  }
+};
+```
+
+### 🚀 7. Idempotency for Financial Transactions
+**Critical:** Prevent double-charging due to network retries.
+
+```typescript
+// Client includes idempotency key
+POST /api/v1/wallet/withdraw
+Headers: {
+  'X-Idempotency-Key': '550e8400-e29b-41d4-a716-446655440000',
+  'Authorization': 'Bearer ...'
+}
+Body: {
+  amount: 100,
+  toAccount: 'bank_789'
+}
+
+// Server implementation
+export const withdrawalIdempotencyMiddleware = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const idempotencyKey = req.headers['x-idempotency-key'];
+  
+  if (!idempotencyKey) {
+    return res.status(400).json({ error: 'X-Idempotency-Key required' });
+  }
+
+  const cacheKey = `idempotency:withdraw:${idempotencyKey}`;
+  
+  // Check if already processed
+  const existingResult = await redis.get(cacheKey);
+  if (existingResult) {
+    const { status, body } = JSON.parse(existingResult);
+    return res.status(status).json(body);
+  }
+
+  // Mark as in-progress
+  await redis.set(cacheKey, JSON.stringify({ status: 'PROCESSING' }), 'EX', 3600);
+
+  // Intercept response to cache it
+  const originalJson = res.json;
+  res.json = function (body) {
+    redis.set(
+      cacheKey,
+      JSON.stringify({ status: res.statusCode, body }),
+      'EX',
+      86400  // Cache for 24 hours
+    );
+    return originalJson.call(this, body);
+  };
+
+  next();
+};
+```
+
+### 📈 8. High-Performance Optimization for Trading Systems
+**Principles:**
+- Connection pooling: 20-100 concurrent connections
+- Query caching: Redis for hot data (orderbooks, user balances)
+- Database indexes: On `symbol`, `userId`, `timestamp`, `status`
+- Pagination: Never return unlimited result sets
+- Batch operations: Insert/update 1000s of records in one query
+
+```typescript
+// Good: Batched ledger writes
+await prisma.ledgerEntry.createMany({
+  data: trades.map(trade => ({
+    walletId: trade.buyerId,
+    type: 'DEBIT',
+    amount: trade.price * trade.quantity,
+    tradeId: trade.id,
+  })),
+});
+
+// Bad: One-by-one writes
+for (const trade of trades) {
+  await prisma.ledgerEntry.create({...});  // N round-trips!
+}
+```
+
+---
+
 ## 📅 The 4-Week Action Plan
 
 ```
