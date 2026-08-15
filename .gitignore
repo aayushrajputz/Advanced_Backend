@@ -28,6 +28,7 @@ logs/
 # System Files
 .DS_Store
 Thumbs.db
+NOTES.md
 
 # Documentation / Scratch
 LLD_Master_Plan.md
