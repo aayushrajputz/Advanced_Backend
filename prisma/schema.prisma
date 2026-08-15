@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+ 
+model User {
+  id  String   @id @default(uuid())
+  name      String
+  email     String  @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  wallet    Wallet?
+  orders   Order[]
+}
+
+model Wallet{
+  id String @id @default(uuid())
+  userId String @unique
+  user   User @relation(fields: [userId],references: [id],onDelete: Cascade)
+  balance Decimal @default(0.00) @db.Decimal(20,4)
+  currency String @default("INR")
+  version Int @default(0) // for Optimistic Locking
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ledgerEntries  LedgerEntry[] 
+}
+
+model Order {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId], references:[id])
+  symbol String
+  type String
+  side String
+  price Decimal @db.Decimal(20,4)
+  status String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tradesBuy Trade[] @relation("BuyOrder")
+  tradesSell Trade[] @relation("SellOrder")
+
+}
+
+model Trade{
+  id String @id @default(uuid())
+  buyOrderId String
+  buyOrder Order @relation("BuyOrder",fields: [buyOrderId],references:[id])
+  sellOrderId String
+  sellOrder Order @relation("SellOrder",fields: [sellOrderId],references:[id])
+  price Decimal @db.Decimal(20,4)
+  quantity Decimal @db.Decimal(20,4)
+  executedAt DateTime @default(now())
+
+}
+
+model LedgerEntry{
+  id String @id @default(uuid())
+  walletId String
+  wallet Wallet @relation(fields:[walletId],references:[id])
+  amount Decimal @db.Decimal(20,4)
+  type String //CREDIT or DEBIT
+  description String
+  balance Decimal @db.Decimal(20,4)
+  createdAt DateTime @default(now())
+} 

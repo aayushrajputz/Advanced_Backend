@@ -1,4 +1,4 @@
-
+import { prisma } from "../config/db.js";
 
 export interface User {
     id: string,
@@ -7,19 +7,30 @@ export interface User {
     password: string,
 }
 
-const users: User[] = [];
+export const createUser = async (user: User) => {
+    return await prisma.user.create({
+        data: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            password: user.password,
+            wallet: {
+                create: {
+                    currency: "INR",
+                    balance: 0
+                }
+            }
+        }
 
-export const createUser = (user: User): User => {
-    users.push(user);
-    return user;
+    })
 }
-
-export const findById = (id: string): User | undefined => {
-    return users.find(u => u.id === id)
+export const findById = async (id: string) => {
+    return await prisma.user.findUnique({
+        where: { id }
+    })
 }
-
-export const findByEmail = (email: string): User | undefined => {
-    return users.find(u => u.email === email)
-}
-
-
+export const findByEmail = async (email: string) => {
+    return await prisma.user.findUnique({
+        where: { email }
+    })
+} 

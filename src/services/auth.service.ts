@@ -7,13 +7,13 @@ import { BadRequestError, UnauthorizedError } from "../errors/app-errors.js";
 
 
 export const signUp = async (name: string, email: string, password: string) => {
-    const existingUser = userRepo.findByEmail(email);
+    const existingUser = await userRepo.findByEmail(email);
     if (existingUser) {
         throw new BadRequestError("Email already exists")
     }
     const hashedPassword = await argon2.hash(password);
 
-    const user = userRepo.createUser({
+    const user = await userRepo.createUser({
         id: randomUUID(),
         name,
         email,
@@ -32,12 +32,12 @@ export const signUp = async (name: string, email: string, password: string) => {
         expiresIn: "7d"
     })
 
-    return { user: { id: user.id, email: user.email }, accessToken, refreshToken }
+    return { user: { id: user.id, name: name, email: user.email }, accessToken, refreshToken }
 
 }
 
 export const login = async (email: string, password: string) => {
-    const user = userRepo.findByEmail(email);
+    const user = await userRepo.findByEmail(email);
     if (!user) {
         throw new UnauthorizedError("Invalid credentials")
     }
@@ -60,6 +60,7 @@ export const login = async (email: string, password: string) => {
     return {
         user: {
             id: user.id,
+            name: user.name,
             email: user.email
         },
         accessToken,
@@ -77,7 +78,7 @@ export const refresh = async (refreshToken: string) => {
         throw new UnauthorizedError("Invalid or expired refresh token");
     }
 
-    const user = userRepo.findById(payload.userId);
+    const user = await userRepo.findById(payload.userId);
     if (!user) {
         throw new UnauthorizedError("User not found");
     }
@@ -90,7 +91,7 @@ export const refresh = async (refreshToken: string) => {
     });
 
     return {
-        user: { id: user.id, email: user.email },
+        user: { id: user.id, name: user.name, email: user.email },
         accessToken,
     };
 };

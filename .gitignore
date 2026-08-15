@@ -1,3 +1,33 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# Build Outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Generated Files
+/src/generated/
+
+# IDE & Tooling Folders
+.vscode/
+.idea/
+.agents/
+.claude/
+.windsurf/
+
+# Logs & Debugging
+*.log
+logs/
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Documentation / Scratch
 LLD_Master_Plan.md
-package-lock.json
