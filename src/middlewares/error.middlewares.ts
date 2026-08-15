@@ -34,7 +34,9 @@ export const globalErrorHandler = (
     }
 
     // If it is an unexpected system/programming bug (500)
-    console.error("🔥 SYSTEM ERROR:", err);
+    console.error("🔥 SYSTEM ERROR:", err.stack || err);
+    console.error("🔥 ERROR KEYS:", Object.getOwnPropertyNames(err));
+    console.error("🔥 ERROR DETAIL:", JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
     return res.status(500).json({
         success: false,
         error: {

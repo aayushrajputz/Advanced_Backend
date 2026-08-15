@@ -257,4 +257,5 @@ npm run dev
 ---
 
 ## 👨‍💻 Author
-**Aayush** - Senior Backend Engineer Trainee & Fintech Architect.
+**Aayush** - Backend Engineer 
+ 

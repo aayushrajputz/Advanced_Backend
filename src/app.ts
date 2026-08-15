@@ -4,6 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { globalErrorHandler } from "./middlewares/error.middlewares.js";
 import authRoutes from "./routes/auth.routes.js";
+import walletRoutes from "./routes/wallet.routes.js";
 
 const app = express();
 
@@ -19,7 +20,8 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use("/api/v1/auth", authRoutes)
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/wallet", walletRoutes);
 
 
 // Error Handler (LAST!)
