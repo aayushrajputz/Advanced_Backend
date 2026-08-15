@@ -28,7 +28,13 @@ logs/
 # System Files
 .DS_Store
 Thumbs.db
-NOTES.md
 
-# Documentation / Scratch
+# Documentation / Scratch / Development Files
+NOTES.md
 LLD_Master_Plan.md
+Backend_Master_Plan.md
+
+# Lock Files & Local Config
+package-lock.json
+skills-lock.json
+docker-compose.yml
