@@ -36,15 +36,26 @@ export const depositFunds = async (walletId: string, amount: number, description
 export const withdrawFunds = async (walletId: string, amount: number, description: string) => {
     return await prisma.$transaction(async (tx: any) => {
         // 1. Deduct Wallet Balance
+        // 1. Acquire exclusive Pessimistic lock on the wallet row
+        const [wallet] = await tx.$queryRaw<any[]>`
+            SELECT * FROM "Wallet" WHERE id = ${walletId} FOR UPDATE
+        `;
+        if (!wallet) {
+            throw new BadRequestError("Wallet not found");
+        }
+        // Double-check balance inside the lock boundary!
+        if (Number(wallet.balance) < amount) {
+            throw new BadRequestError("Insufficient wallet balance");
+        }
+        // 2. Safe update within lock transaction
         const updatedWallet = await tx.wallet.update({
             where: { id: walletId },
             data: {
-                balance: { decrement: amount },
-                version: { increment: 1 } // Optimistic Locking
+                balance: { decrement: amount }
             }
         });
-
         // 2. Log Debit Ledger Entry
+        // 3. Log ledger entry
         const ledgerEntry = await tx.ledgerEntry.create({
             data: {
                 walletId,
@@ -54,11 +65,9 @@ export const withdrawFunds = async (walletId: string, amount: number, descriptio
                 balance: updatedWallet.balance
             }
         });
-
         return { wallet: updatedWallet, ledgerEntry };
     });
 };
-
 export const transferFunds = async (senderWalletId: string, recepientWalletId: string, amount: number) => {
     return await prisma.$transaction(async (tx: any) => {
         const updatedSenderWallet = await tx.wallet.update({
@@ -102,14 +111,5 @@ export const transferFunds = async (senderWalletId: string, recepientWalletId: s
             }
         })
         return { senderWalletId: updatedSenderWallet, recepientWalletId: updatedReceiverWallet }
-
     });
 };
-
-
-
-
-
-
-
-
