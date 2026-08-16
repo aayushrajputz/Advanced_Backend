@@ -14,7 +14,7 @@ export const depositFunds = async (walletId: string, amount: number, description
             where: { id: walletId },
             data: {
                 balance: { increment: amount },
-                version: { increment: 1 } // Optimistic Locking
+
             }
         });
 
