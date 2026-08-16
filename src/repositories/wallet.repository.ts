@@ -70,46 +70,57 @@ export const withdrawFunds = async (walletId: string, amount: number, descriptio
 };
 export const transferFunds = async (senderWalletId: string, recepientWalletId: string, amount: number) => {
     return await prisma.$transaction(async (tx: any) => {
+        // 1. Sort IDs to prevent Deadlocks (Crucial Interview Step!)
+        const [firstId, secondId] = senderWalletId < recepientWalletId ? [senderWalletId, recepientWalletId] : [recepientWalletId, senderWalletId];
+
+        // 2. Lock rows in sorted order
+        await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${firstId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT * FROM "Wallet" WHERE id = ${secondId} FOR UPDATE`;
+
+        // 3. Fetch sender's current balance inside lock
+        const senderWallet = await tx.wallet.findUnique({ where: { id: senderWalletId } });
+        if (!senderWallet || Number(senderWallet.balance) < amount) {
+            throw new BadRequestError("Insufficient wallet balance for transfer");
+        }
+
+        // 4. Update balances
         const updatedSenderWallet = await tx.wallet.update({
             where: { id: senderWalletId },
             data: {
-                balance: {
-                    decrement: amount
-                },
-                version: {
-                    increment: 1
-                }
+                balance:
+                    { decrement: amount }
             }
-        })
+        });
+
         const updatedReceiverWallet = await tx.wallet.update({
             where: { id: recepientWalletId },
             data: {
-                balance: {
-                    increment: amount
-                },
-                version: {
-                    increment: 1
-                }
+                balance:
+                    { increment: amount }
             }
-        })
+        });
+
+        // 5. Create Ledger entries for audit trail
         await tx.ledgerEntry.create({
             data: {
                 walletId: senderWalletId,
-                amount: amount,
+                amount,
                 type: "DEBIT",
                 description: "Transfer to wallet",
                 balance: updatedSenderWallet.balance
             }
-        })
+        });
+
         await tx.ledgerEntry.create({
             data: {
                 walletId: recepientWalletId,
-                amount: amount,
+                amount,
                 type: "CREDIT",
                 description: "Transfer from wallet",
                 balance: updatedReceiverWallet.balance
             }
-        })
-        return { senderWalletId: updatedSenderWallet, recepientWalletId: updatedReceiverWallet }
+        });
+
+        return { senderWallet: updatedSenderWallet, recepientWallet: updatedReceiverWallet };
     });
 };

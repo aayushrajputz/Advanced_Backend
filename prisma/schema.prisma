@@ -17,6 +17,7 @@ model User {
   updatedAt DateTime @updatedAt
   wallet    Wallet?
   orders   Order[]
+  
 }
 
 model Wallet{
@@ -44,6 +45,7 @@ model Order {
   updatedAt DateTime @updatedAt
   tradesBuy Trade[] @relation("BuyOrder")
   tradesSell Trade[] @relation("SellOrder")
+  @@index([userId, status]) 
 
 }
 
