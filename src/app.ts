@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { globalErrorHandler } from "./middlewares/error.middlewares.js";
 import authRoutes from "./routes/auth.routes.js";
 import walletRoutes from "./routes/wallet.routes.js";
+import orderRoutes from "./routes/order.routes.js"
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/wallet", walletRoutes);
+app.use("/api/v1/order", orderRoutes);
 
 
 // Error Handler (LAST!)
