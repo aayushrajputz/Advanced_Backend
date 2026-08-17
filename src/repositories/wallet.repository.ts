@@ -124,3 +124,17 @@ export const transferFunds = async (senderWalletId: string, recepientWalletId: s
         return { senderWallet: updatedSenderWallet, recepientWallet: updatedReceiverWallet };
     });
 };
+
+export const getLedgerHistory = async (walletId: string, limit: number, cursor?: string) => {
+    return await prisma.ledgerEntry.findMany({
+        where: {
+            walletId,
+        },
+        take: limit,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
+        orderBy: {
+            createdAt: "desc"
+        }
+    })
+}
