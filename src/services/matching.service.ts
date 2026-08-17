@@ -1,4 +1,3 @@
-
 import { prisma } from "../config/db.js"
 
 export const matchOrder = async (newOrder: any) => {
@@ -69,13 +68,17 @@ export const matchOrder = async (newOrder: any) => {
             where: { id: buyOrder.id },
             data: { status: "FILLED" }
         });
+        const refund = (Number(buyOrder.price) - tradePrice) * tradeQuantity;
         const updatedBuyWallet = await tx.wallet.update({
             where: {
                 userId: buyOrder.userId
             },
             data: {
                 locked: {
-                    decrement: tradeCost
+                    decrement: Number(buyOrder.price) * tradeQuantity
+                },
+                balance: {
+                    increment: refund
                 }
             }
         })
@@ -110,10 +113,6 @@ export const matchOrder = async (newOrder: any) => {
         return trade;
 
     })
-
-
-
-
 }
 
 

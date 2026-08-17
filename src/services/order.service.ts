@@ -1,4 +1,5 @@
 import { BadRequestError } from "../errors/app-errors.js";
+import { matchOrder } from "./matching.service.js";
 import { prisma } from "../config/db.js";
 
 export const placeOrder = async (
@@ -12,7 +13,7 @@ export const placeOrder = async (
     const orderPrice = price || 0;
     const totalCost = quantity * orderPrice;
 
-    return await prisma.$transaction(async (tx) => {
+    const order = await prisma.$transaction(async (tx) => {
         // 1. Fetch wallet inside transaction and lock the row
         const [wallet]: any[] = await tx.$queryRaw`
             SELECT * FROM "Wallet" WHERE "userId" = ${userId} FOR UPDATE
@@ -39,7 +40,7 @@ export const placeOrder = async (
         }
 
         // 3. Create the Order entry
-        const order = await tx.order.create({
+        const createdOrder = await tx.order.create({
             data: {
                 userId,
                 symbol,
@@ -51,6 +52,10 @@ export const placeOrder = async (
             }
         });
 
-        return order;
+        return createdOrder;
     });
-};
+
+    await matchOrder(order);
+
+    return order;
+}; 
