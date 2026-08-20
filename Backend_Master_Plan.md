@@ -615,13 +615,19 @@ Build a multi-tenant expense management system supporting split transactions, wa
 **Goal:** Build a production-ready application featuring background job handling, caching, containerization, and automated testing.
 
 #### 💡 Core Topics
-1.  **Redis Basics:** Utilizing memory stores for distributed caching, sessions, and simple key-value lookups.
+1.  **Redis Under the Hood (System Design):**
+    *   **Single-Threaded Event Loop:** Why it is single-threaded and how it uses I/O Multiplexing (`select`/`epoll` system calls) to handle 100k+ RPS.
+    *   **RAM vs Disk Physics:** Latency differences at hardware level.
+    *   **Persistence Mechanisms:** How RDB (snapshots via copy-on-write `fork()`) and AOF (append-only file write logging) prevent data loss.
+    *   **Data Structures Internals:** Memory layouts of Strings, Hashes, and Skip Lists (Sorted Sets).
 2.  **Containerization (Docker):** Creating multi-stage Docker builds to containerize backends and compile production binaries.
 3.  **Structured Logging:** Setting up Winston or Pino with JSON formatting to output logs containing process IDs and correlation IDs.
 4.  **Rate Limiting:** Guarding public routes with token-bucket algorithm limiters backed by Redis.
 5.  **In-Memory Asynchronous Queues:** Understanding Node.js Events, Event Emitters, and processing background tasks in memory (and why this fails when the process crashes).
-6.  **Background Jobs (BullMQ):** Offloading CPU-intensive or slow operations (e.g., PDF generation, emails) to robust background workers using Redis-backed persistent message queues.
-6.  **Testing Suite:** Writing unit tests for business logic, mocking external dependencies, and creating integration tests using actual test databases.
+6.  **Background Jobs & Queue Engine (BullMQ Under the Hood):**
+    *   How BullMQ utilizes Redis hashes, streams, and sorted sets to manage job state machines.
+    *   Handling worker failures, concurrency limits, task retries, and job status transitions without losing messages.
+7.  **Testing Suite:** Writing unit tests for business logic, mocking external dependencies, and creating integration tests using actual test databases.
 
 #### 🛠️ Core Project: Production-Ready Notification & Processing Engine
 Create a backend system that handles large file uploads, processes csv records, schedules background email deliveries, and rate-limits API usage.
@@ -642,7 +648,10 @@ Create a backend system that handles large file uploads, processes csv records, 
 **Goal:** Design highly concurrent systems using message brokers, WebSockets, performance tuning, and monitoring suites.
 
 #### 💡 Core Topics
-1.  **Message Brokers (Kafka/RabbitMQ):** Understanding event-driven messaging pipelines, producer/consumer models, and partitioning strategies.
+1.  **Message Brokers (Kafka Under the Hood):**
+    *   **Log-Structured Storage:** Why Kafka writes to an append-only commit log on disk, and how sequential I/O outperforms random memory access.
+    *   **Zero-Copy Optimization:** How Kafka uses the OS-level `sendfile()` system call to bypass application memory buffer copies for maximum network throughput.
+    *   **Partitioning & Offsets:** Distributed log consumption, consumer group coordinators, and partition rebalancing logic.
 2.  **Real-time Communication (WebSockets):** Implementing persistent duplex communication, connection handshakes, and pub/sub mechanisms.
 3.  **Performance Optimization:** Applying database connection pooling, query pagination, and multi-level caching strategies.
 4.  **Load Testing:** Simulating high-traffic scenarios using tools like k6 or Autocannon.

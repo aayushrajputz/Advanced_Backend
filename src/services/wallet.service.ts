@@ -52,3 +52,16 @@ export const transfer = async (senderUserId: string, reciverUserId: string, amou
     }
     return walletRepo.transferFunds(senderWallet.id, reciverWallet.id, amount)
 }
+
+export const ledgerHistory = async (userId: string, limit: number, cursor?: string) => {
+    const wallet = await walletRepo.findByUserId(userId);
+    if (!wallet) {
+        throw new BadRequestError("Wallet Not found")
+    }
+    const entries = await walletRepo.getLedgerHistory(wallet.id, limit, cursor);
+    const nextCursor = entries.length === limit ? entries[entries.length - 1].id : null;
+    return {
+        entries,
+        nextCursor,
+    }
+}

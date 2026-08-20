@@ -10,4 +10,6 @@ router.post("/withdraw", authenticateJWT, WalletController.withdraw)
 
 router.post("/transfer", authenticateJWT, WalletController.transfer)
 
+router.get("/history", authenticateJWT, WalletController.getHistory)
+
 export default router 

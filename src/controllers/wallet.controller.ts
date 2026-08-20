@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as walletService from "../services/wallet.service.js"
+import { BadRequestError } from "../errors/app-errors.js";
 
 export const deposit = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -44,4 +45,22 @@ export const transfer = async (req: Request, res: Response, next: NextFunction) 
     } catch (error) {
         next(error)
     }
-} 
+}
+
+export const getHistory = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) throw new BadRequestError("Unauthorized User")
+        const limit = Number(req.query.limit) || 10;
+        const cursor = (req.query.cursor as string) || undefined;
+        const history = await walletService.ledgerHistory(userId, limit, cursor);
+        res.status(200).json({
+            success: true,
+            message: "History fetched successfully",
+            history
+
+        })
+    } catch (error) {
+        next(error)
+    }
+}
