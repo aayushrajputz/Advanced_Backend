@@ -6,6 +6,7 @@ import { globalErrorHandler } from "./middlewares/error.middlewares.js";
 import authRoutes from "./routes/auth.routes.js";
 import walletRoutes from "./routes/wallet.routes.js";
 import orderRoutes from "./routes/order.routes.js"
+import "./config/redis.js";
 
 const app = express();
 

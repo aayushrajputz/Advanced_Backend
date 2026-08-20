@@ -1,4 +1,4 @@
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -14,4 +14,4 @@ redis.on("connect", () => {
 
 redis.on("error", () => {
     console.error("Redis connection error ")
-})  
+}) 
